@@ -16,6 +16,12 @@ public sealed class WorkTrackerApiClient(HttpClient httpClient)
         return await response.Content.ReadFromJsonAsync<TrackedRepoDto>(cancellationToken) ?? repo;
     }
 
+    public async Task DeleteRepoAsync(int id, CancellationToken cancellationToken = default)
+    {
+        using var response = await httpClient.DeleteAsync($"api/repos/{id}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task<IReadOnlyList<PullRequestDto>> GetPullRequestsAsync(CancellationToken cancellationToken = default) =>
         await httpClient.GetFromJsonAsync<List<PullRequestDto>>("api/prs", cancellationToken) ?? [];
 

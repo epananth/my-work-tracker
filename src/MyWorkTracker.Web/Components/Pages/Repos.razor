@@ -85,6 +85,7 @@
                                     <th>Platform</th>
                                     <th>Onboarded</th>
                                     <th>Status</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -99,6 +100,11 @@
                                         <td class="small text-body-secondary">@repo.OnboardedAt.ToLocalTime().ToString("MMM d, yyyy")</td>
                                         <td>
                                             <span class="badge @(repo.IsActive ? "text-bg-success" : "text-bg-secondary")">@(repo.IsActive ? "Active" : "Inactive")</span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteRepoAsync(repo.Id)" title="Remove repo">
+                                                ✕
+                                            </button>
                                         </td>
                                     </tr>
                                 }
@@ -171,6 +177,23 @@
         finally
         {
             isSubmitting = false;
+        }
+    }
+
+    private async Task DeleteRepoAsync(int id)
+    {
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            await Api.DeleteRepoAsync(id);
+            successMessage = "Repository removed.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Couldn't delete repository: {ex.Message}";
         }
     }
 
