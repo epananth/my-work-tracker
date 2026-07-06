@@ -1,0 +1,133 @@
+@page "/pull-requests"
+@rendermode InteractiveServer
+@inject WorkTrackerApiClient Api
+
+<PageTitle>PR Monitor</PageTitle>
+
+<h1 class="mb-2">PR Monitor</h1>
+<p class="text-body-secondary mb-4">Track open pull requests assigned to you and quickly spot items that need review.</p>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-6 col-xl-7">
+                <label class="form-label">Search</label>
+                <input class="form-control" @bind="searchText" @bind:event="oninput" placeholder="Filter by title, author, or external id" />
+            </div>
+            <div class="col-md-4 col-xl-3">
+                <label class="form-label">Status</label>
+                <select class="form-select" @bind="selectedStatusFilter">
+                    <option value="All">All statuses</option>
+                    @foreach (var status in Enum.GetValues<PrStatus>())
+                    {
+                        <option value="@status.ToString()">@DisplayHelper.ToDisplayText(status)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2 col-xl-2 d-grid">
+                <button class="btn btn-outline-primary" @onclick="LoadAsync">Refresh</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="d-flex align-items-center gap-3">
+        <div class="spinner-border text-primary" role="status"></div>
+        <span>Loading pull requests...</span>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+else
+{
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-body-tertiary d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">Assigned pull requests</span>
+            <span class="badge text-bg-light">@FilteredPullRequests.Count item(s)</span>
+        </div>
+        <div class="card-body p-0">
+            @if (FilteredPullRequests.Count == 0)
+            {
+                <div class="p-4 text-body-secondary">No pull requests matched the current filters.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>PR</th>
+                                <th>Status</th>
+                                <th>Author</th>
+                                <th>Created</th>
+                                <th>Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var pr in FilteredPullRequests)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold"><a href="@pr.Url" target="_blank" rel="noreferrer">@pr.Title</a></div>
+                                        <div class="small text-body-secondary">#@pr.ExternalId</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge @DisplayHelper.PullRequestStatusBadge(pr.Status)">@DisplayHelper.ToDisplayText(pr.Status)</span>
+                                    </td>
+                                    <td>@pr.Author</td>
+                                    <td class="small text-body-secondary">@pr.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</td>
+                                    <td class="small text-body-secondary">@pr.UpdatedAt.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private string? errorMessage;
+    private string searchText = string.Empty;
+    private string selectedStatusFilter = "All";
+    private IReadOnlyList<PullRequestDto> pullRequests = [];
+
+    private List<PullRequestDto> FilteredPullRequests => pullRequests
+        .Where(pr => selectedStatusFilter == "All" || string.Equals(pr.Status.ToString(), selectedStatusFilter, StringComparison.OrdinalIgnoreCase))
+        .Where(pr => string.IsNullOrWhiteSpace(searchText)
+            || pr.Title.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+            || pr.Author.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+            || pr.ExternalId.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(pr => pr.UpdatedAt)
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            pullRequests = await Api.GetPullRequestsAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Couldn't load pull requests: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

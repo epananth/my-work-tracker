@@ -1,0 +1,237 @@
+@page "/board"
+@rendermode InteractiveServer
+@inject WorkTrackerApiClient Api
+
+<PageTitle>Work Item Board</PageTitle>
+
+<h1 class="mb-2">Work Item Board</h1>
+<p class="text-body-secondary mb-4">Kanban view of current work with quick status updates for planning and review.</p>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-lg-8">
+                <label class="form-label">Search</label>
+                <input class="form-control" @bind="searchText" @bind:event="oninput" placeholder="Filter by title, tag, or work item id" />
+            </div>
+            <div class="col-sm-6 col-lg-2">
+                <div class="small text-body-secondary">Active items</div>
+                <div class="fs-4 fw-semibold">@ActiveItemCount</div>
+            </div>
+            <div class="col-sm-6 col-lg-2 d-grid">
+                <button class="btn btn-outline-primary" @onclick="LoadAsync" disabled="@isLoading">Refresh board</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="d-flex align-items-center gap-3">
+        <div class="spinner-border text-primary" role="status"></div>
+        <span>Loading board...</span>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+else
+{
+    <div class="row g-3 board-grid">
+        @foreach (var status in BoardColumns)
+        {
+            var items = GetVisibleItems(status);
+            <div class="col-12 col-xl board-column">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-body-tertiary d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold">@DisplayHelper.ToDisplayText(status)</span>
+                        <span class="badge @DisplayHelper.WorkItemStatusBadge(status)">@items.Count</span>
+                    </div>
+                    <div class="card-body bg-body-tertiary-subtle">
+                        @if (items.Count == 0)
+                        {
+                            <div class="text-body-secondary small">No items in this column.</div>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-column gap-3">
+                                @foreach (var item in items)
+                                {
+                                    <div class="card work-item-card border-0 shadow-sm">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between gap-2 mb-2">
+                                                <div>
+                                                    <div class="small text-body-secondary">#@item.ExternalId</div>
+                                                    <div class="fw-semibold">
+                                                        @if (string.IsNullOrWhiteSpace(item.Url))
+                                                        {
+                                                            @item.Title
+                                                        }
+                                                        else
+                                                        {
+                                                            <a href="@item.Url" target="_blank" rel="noreferrer">@item.Title</a>
+                                                        }
+                                                    </div>
+                                                </div>
+                                                <span class="badge @DisplayHelper.WorkItemPriorityBadge(item.Priority)">@DisplayHelper.ToDisplayText(item.Priority)</span>
+                                            </div>
+
+                                            @if (!string.IsNullOrWhiteSpace(item.Description))
+                                            {
+                                                <p class="small text-body-secondary mb-2">@item.Description</p>
+                                            }
+
+                                            @if (item.Tags.Count > 0)
+                                            {
+                                                <div class="d-flex flex-wrap gap-2 mb-2">
+                                                    @foreach (var tag in item.Tags)
+                                                    {
+                                                        <span class="badge rounded-pill text-bg-light">@tag</span>
+                                                    }
+                                                </div>
+                                            }
+
+                                            <div class="small text-body-secondary mb-3">
+                                                @if (item.DueDate.HasValue)
+                                                {
+                                                    <span>Due @item.DueDate.Value.ToLocalTime().ToString("MMM d")</span>
+                                                }
+                                                @if (item.BlockedByIds.Count > 0)
+                                                {
+                                                    <span class="ms-2">Blocked by @item.BlockedByIds.Count item(s)</span>
+                                                }
+                                            </div>
+
+                                            <label class="form-label small mb-1">Move to</label>
+                                            <select class="form-select form-select-sm"
+                                                    value="@item.Status.ToString()"
+                                                    @onchange="args => OnStatusChangedAsync(item, args.Value?.ToString())"
+                                                    disabled="@(updatingItemId == item.Id)">
+                                                @foreach (var boardStatus in MovableStatuses)
+                                                {
+                                                    <option value="@boardStatus.ToString()">@DisplayHelper.ToDisplayText(boardStatus)</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private static readonly WorkItemStatus[] BoardColumns =
+    [
+        WorkItemStatus.Backlog,
+        WorkItemStatus.Todo,
+        WorkItemStatus.InProgress,
+        WorkItemStatus.InReview,
+        WorkItemStatus.Done
+    ];
+
+    private static readonly WorkItemStatus[] MovableStatuses =
+    [
+        WorkItemStatus.Backlog,
+        WorkItemStatus.Todo,
+        WorkItemStatus.InProgress,
+        WorkItemStatus.InReview,
+        WorkItemStatus.Done,
+        WorkItemStatus.Cancelled
+    ];
+
+    private readonly Dictionary<WorkItemStatus, List<WorkItemDto>> boardItems = BoardColumns.ToDictionary(status => status, _ => new List<WorkItemDto>());
+    private bool isLoading = true;
+    private string? errorMessage;
+    private string searchText = string.Empty;
+    private int? updatingItemId;
+
+    private int ActiveItemCount => boardItems
+        .Where(entry => entry.Key != WorkItemStatus.Done)
+        .Sum(entry => entry.Value.Count);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            var groupedTask = Api.GetWorkItemBoardAsync();
+            var allItemsTask = Api.GetWorkItemsAsync();
+            await Task.WhenAll(groupedTask, allItemsTask);
+
+            var groupedItems = await groupedTask;
+            var allItems = await allItemsTask;
+
+            foreach (var status in BoardColumns)
+            {
+                boardItems[status] = [];
+            }
+
+            foreach (var status in BoardColumns.Where(status => status != WorkItemStatus.Done))
+            {
+                if (groupedItems.TryGetValue(status.ToString(), out var items))
+                {
+                    boardItems[status] = items.OrderByDescending(item => item.UpdatedAt).ToList();
+                }
+            }
+
+            boardItems[WorkItemStatus.Done] = allItems
+                .Where(item => item.Status == WorkItemStatus.Done)
+                .OrderByDescending(item => item.UpdatedAt)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Couldn't load board data: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            updatingItemId = null;
+        }
+    }
+
+    private List<WorkItemDto> GetVisibleItems(WorkItemStatus status) => boardItems[status]
+        .Where(item => string.IsNullOrWhiteSpace(searchText)
+            || item.Title.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+            || item.ExternalId.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+            || item.Tags.Any(tag => tag.Contains(searchText, StringComparison.OrdinalIgnoreCase)))
+        .OrderByDescending(item => DisplayHelper.PriorityWeight(item.Priority))
+        .ThenBy(item => item.DueDate ?? DateTime.MaxValue)
+        .ThenByDescending(item => item.UpdatedAt)
+        .ToList();
+
+    private async Task OnStatusChangedAsync(WorkItemDto item, string? newStatusValue)
+    {
+        if (!Enum.TryParse<WorkItemStatus>(newStatusValue, out var newStatus) || newStatus == item.Status)
+        {
+            return;
+        }
+
+        updatingItemId = item.Id;
+        errorMessage = null;
+
+        try
+        {
+            await Api.UpdateWorkItemStatusAsync(item.Id, newStatus);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Couldn't update work item status: {ex.Message}";
+            updatingItemId = null;
+        }
+    }
+}

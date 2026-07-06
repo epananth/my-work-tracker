@@ -1,0 +1,21 @@
+.board-grid {
+    align-items: stretch;
+}
+
+.board-column {
+    min-width: 18rem;
+}
+
+.work-item-card {
+    border-left: 4px solid var(--bs-primary);
+}
+
+.card-body {
+    min-height: 100%;
+}
+
+@media (min-width: 1200px) {
+    .board-column {
+        flex: 1 0 0;
+    }
+}

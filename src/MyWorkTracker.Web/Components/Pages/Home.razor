@@ -1,7 +1,224 @@
 ﻿@page "/"
+@rendermode InteractiveServer
+@inject WorkTrackerApiClient Api
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Dashboard</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1 class="mb-2">Dashboard</h1>
+<p class="text-body-secondary mb-4">A quick view of pull requests, active work, repos, and registered development tools.</p>
 
-Welcome to your new app.
+@if (isLoading)
+{
+    <div class="d-flex align-items-center gap-3">
+        <div class="spinner-border text-primary" role="status"></div>
+        <span>Loading dashboard data...</span>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+else if (dashboard is not null)
+{
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-body-secondary small text-uppercase">Open PRs</div>
+                    <div class="display-6 fw-semibold">@dashboard.OpenPullRequests</div>
+                    <div class="small text-body-secondary">@dashboard.ReviewRequested review requested</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-body-secondary small text-uppercase">In Progress</div>
+                    <div class="display-6 fw-semibold">@dashboard.InProgressItems</div>
+                    <div class="small text-body-secondary">@dashboard.InReviewItems in review</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-body-secondary small text-uppercase">Registered Agents</div>
+                    <div class="display-6 fw-semibold">@dashboard.RegisteredAgents</div>
+                    <div class="small text-body-secondary">@dashboard.ActiveAgents active today</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-body-secondary small text-uppercase">Tracked Repos</div>
+                    <div class="display-6 fw-semibold">@dashboard.ActiveRepos</div>
+                    <div class="small text-body-secondary">Ready for issue and PR tracking</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-xl-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-body-tertiary d-flex justify-content-between align-items-center">
+                    <span class="fw-semibold">Recently updated pull requests</span>
+                    <a class="btn btn-sm btn-outline-primary" href="pull-requests">Open monitor</a>
+                </div>
+                <div class="card-body p-0">
+                    @if (dashboard.RecentPullRequests.Count == 0)
+                    {
+                        <div class="p-4 text-body-secondary">No open pull requests to review.</div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Title</th>
+                                        <th>Status</th>
+                                        <th>Updated</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var pr in dashboard.RecentPullRequests)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div class="fw-semibold">
+                                                    <a href="@pr.Url" target="_blank" rel="noreferrer">@pr.Title</a>
+                                                </div>
+                                                <div class="small text-body-secondary">by @pr.Author</div>
+                                            </td>
+                                            <td>
+                                                <span class="badge @DisplayHelper.PullRequestStatusBadge(pr.Status)">@DisplayHelper.ToDisplayText(pr.Status)</span>
+                                            </td>
+                                            <td class="small text-body-secondary">@pr.UpdatedAt.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-body-tertiary d-flex justify-content-between align-items-center">
+                    <span class="fw-semibold">Priority work items</span>
+                    <a class="btn btn-sm btn-outline-primary" href="board">Open board</a>
+                </div>
+                <div class="card-body">
+                    @if (dashboard.PriorityWorkItems.Count == 0)
+                    {
+                        <div class="text-body-secondary">No active work items available.</div>
+                    }
+                    else
+                    {
+                        <div class="list-group list-group-flush">
+                            @foreach (var item in dashboard.PriorityWorkItems)
+                            {
+                                <div class="list-group-item px-0">
+                                    <div class="d-flex justify-content-between align-items-start gap-3">
+                                        <div>
+                                            <div class="fw-semibold">
+                                                @if (string.IsNullOrWhiteSpace(item.Url))
+                                                {
+                                                    @item.Title
+                                                }
+                                                else
+                                                {
+                                                    <a href="@item.Url" target="_blank" rel="noreferrer">@item.Title</a>
+                                                }
+                                            </div>
+                                            <div class="small text-body-secondary">@DisplayHelper.ToDisplayText(item.Status) • Updated @item.UpdatedAt.ToLocalTime().ToString("MMM d")</div>
+                                        </div>
+                                        <div class="d-flex flex-column align-items-end gap-2">
+                                            <span class="badge @DisplayHelper.WorkItemPriorityBadge(item.Priority)">@DisplayHelper.ToDisplayText(item.Priority)</span>
+                                            <span class="badge @DisplayHelper.WorkItemStatusBadge(item.Status)">@DisplayHelper.ToDisplayText(item.Status)</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private string? errorMessage;
+    private DashboardViewModel? dashboard;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            var pullRequestsTask = Api.GetPullRequestsAsync();
+            var workItemsTask = Api.GetWorkItemsAsync();
+            var agentsTask = Api.GetAgentsAsync();
+            var reposTask = Api.GetReposAsync();
+
+            await Task.WhenAll(pullRequestsTask, workItemsTask, agentsTask, reposTask);
+
+            var pullRequests = await pullRequestsTask;
+            var workItems = await workItemsTask;
+            var agents = await agentsTask;
+            var repos = await reposTask;
+
+            dashboard = new DashboardViewModel(
+                OpenPullRequests: pullRequests.Count,
+                ReviewRequested: pullRequests.Count(pr => pr.Status == PrStatus.ReviewRequested),
+                InProgressItems: workItems.Count(item => item.Status == WorkItemStatus.InProgress),
+                InReviewItems: workItems.Count(item => item.Status == WorkItemStatus.InReview),
+                RegisteredAgents: agents.Count,
+                ActiveAgents: agents.Count(agent => agent.Status == AgentStatus.Active),
+                ActiveRepos: repos.Count(repo => repo.IsActive),
+                RecentPullRequests: pullRequests
+                    .OrderByDescending(pr => pr.UpdatedAt)
+                    .Take(5)
+                    .ToList(),
+                PriorityWorkItems: workItems
+                    .Where(item => item.Status is not WorkItemStatus.Done and not WorkItemStatus.Cancelled)
+                    .OrderByDescending(item => DisplayHelper.PriorityWeight(item.Priority))
+                    .ThenBy(item => item.DueDate ?? DateTime.MaxValue)
+                    .ThenByDescending(item => item.UpdatedAt)
+                    .Take(5)
+                    .ToList());
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Couldn't load dashboard data: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private sealed record DashboardViewModel(
+        int OpenPullRequests,
+        int ReviewRequested,
+        int InProgressItems,
+        int InReviewItems,
+        int RegisteredAgents,
+        int ActiveAgents,
+        int ActiveRepos,
+        List<PullRequestDto> RecentPullRequests,
+        List<WorkItemDto> PriorityWorkItems);
+}
