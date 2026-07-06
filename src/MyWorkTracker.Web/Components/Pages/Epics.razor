@@ -1,5 +1,6 @@
 @page "/epics"
 @rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
 @inject WorkTrackerApiClient Api
 
 <PageTitle>Epic Tracker</PageTitle>
@@ -20,6 +21,65 @@ else if (!string.IsNullOrWhiteSpace(errorMessage))
 }
 else
 {
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-body-tertiary d-flex justify-content-between align-items-center">
+                    <span class="fw-semibold">Create Epic</span>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => showCreateForm = !showCreateForm">
+                        @(showCreateForm ? "Cancel" : "+ New Epic")
+                    </button>
+                </div>
+                @if (showCreateForm)
+                {
+                    <div class="card-body">
+                        @if (!string.IsNullOrWhiteSpace(successMessage))
+                        {
+                            <div class="alert alert-success">@successMessage</div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(createError))
+                        {
+                            <div class="alert alert-danger">@createError</div>
+                        }
+
+                        <EditForm Model="epicForm" OnValidSubmit="CreateEpicAsync">
+                            <DataAnnotationsValidator />
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Title</label>
+                                    <InputText class="form-control" @bind-Value="epicForm.Title" />
+                                    <ValidationMessage For="() => epicForm.Title" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">External ID</label>
+                                    <InputText class="form-control" @bind-Value="epicForm.ExternalId" placeholder="e.g. epic-12345" />
+                                    <ValidationMessage For="() => epicForm.ExternalId" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Target Date</label>
+                                    <InputDate class="form-control" @bind-Value="epicForm.TargetDate" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">URL</label>
+                                    <InputText class="form-control" @bind-Value="epicForm.Url" placeholder="Link to epic in AzDO/GitHub" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Description</label>
+                                    <InputText class="form-control" @bind-Value="epicForm.Description" />
+                                </div>
+                                <div class="col-12">
+                                    <button type="submit" class="btn btn-primary" disabled="@isCreating">
+                                        @(isCreating ? "Creating..." : "Create Epic")
+                                    </button>
+                                </div>
+                            </div>
+                        </EditForm>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
     <div class="row g-4">
         <div class="col-xl-7">
             <div class="card border-0 shadow-sm h-100">
@@ -170,11 +230,16 @@ else
 @code {
     private bool isLoading = true;
     private bool isPriorityLoading;
+    private bool showCreateForm;
+    private bool isCreating;
     private string? errorMessage;
+    private string? createError;
+    private string? successMessage;
     private IReadOnlyList<EpicDto> epics = [];
     private int? selectedEpicId;
     private WorkItemDto? nextItem;
     private IReadOnlyList<WorkItemDto> prioritizedItems = [];
+    private EpicFormModel epicForm = new();
 
     private EpicDto? SelectedEpic => epics.FirstOrDefault(epic => epic.Id == selectedEpicId);
 
@@ -241,5 +306,53 @@ else
         {
             isPriorityLoading = false;
         }
+    }
+
+    private async Task CreateEpicAsync()
+    {
+        isCreating = true;
+        createError = null;
+        successMessage = null;
+
+        try
+        {
+            await Api.AddEpicAsync(new EpicDto
+            {
+                Title = epicForm.Title.Trim(),
+                Description = epicForm.Description?.Trim(),
+                ExternalId = epicForm.ExternalId.Trim(),
+                Url = epicForm.Url?.Trim() ?? "",
+                TargetDate = epicForm.TargetDate,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            epicForm = new EpicFormModel();
+            successMessage = "Epic created successfully.";
+            showCreateForm = false;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            createError = $"Couldn't create epic: {ex.Message}";
+        }
+        finally
+        {
+            isCreating = false;
+        }
+    }
+
+    private sealed class EpicFormModel
+    {
+        [Required]
+        public string Title { get; set; } = string.Empty;
+
+        public string? Description { get; set; }
+
+        [Required]
+        public string ExternalId { get; set; } = string.Empty;
+
+        public string? Url { get; set; }
+
+        public DateTime? TargetDate { get; set; }
     }
 }
