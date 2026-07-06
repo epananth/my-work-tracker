@@ -68,6 +68,70 @@ public static class WorkItemEndpoints
                 .ToDictionary(g => g.Key.ToString(), g => g.ToList());
         });
 
+        group.MapPost("/", async (CreateWorkItemRequest request, TrackerDbContext db, IConfiguration config) =>
+        {
+            // Create locally
+            var item = new WorkItem
+            {
+                Title = request.Title,
+                Description = request.Description,
+                ExternalId = request.ExternalId ?? $"local-{Guid.NewGuid():N}",
+                Url = request.Url ?? "",
+                Status = request.Status ?? WorkItemStatus.Todo,
+                Priority = request.Priority ?? WorkItemPriority.Medium,
+                DueDate = request.DueDate,
+                EpicId = request.EpicId,
+                RepoId = request.RepoId,
+                Tags = request.Tags ?? [],
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                LastSyncedAt = DateTime.UtcNow
+            };
+
+            // If a repo is specified, create a GitHub issue and assign to self
+            if (request.RepoId.HasValue && request.CreateInRemote)
+            {
+                var repo = await db.Repos.FindAsync(request.RepoId.Value);
+                if (repo is not null && repo.Platform == "GitHub")
+                {
+                    var ghToken = config["GitHub:Token"];
+                    if (!string.IsNullOrEmpty(ghToken))
+                    {
+                        using var http = new HttpClient();
+                        http.DefaultRequestHeaders.Add("Authorization", $"Bearer {ghToken}");
+                        http.DefaultRequestHeaders.Add("User-Agent", "MyWorkTracker");
+                        http.DefaultRequestHeaders.Add("Accept", "application/vnd.github+json");
+
+                        var issuePayload = new
+                        {
+                            title = request.Title,
+                            body = request.Description ?? "",
+                            assignees = new[] { config["GitHub:Username"] ?? "" },
+                            labels = request.Tags ?? []
+                        };
+
+                        var response = await http.PostAsJsonAsync(
+                            $"https://api.github.com/repos/{repo.Owner}/{repo.Name}/issues",
+                            issuePayload);
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var created = await response.Content.ReadFromJsonAsync<GitHubIssueResponse>();
+                            if (created is not null)
+                            {
+                                item.ExternalId = created.Number.ToString();
+                                item.Url = created.HtmlUrl;
+                            }
+                        }
+                    }
+                }
+            }
+
+            db.WorkItems.Add(item);
+            await db.SaveChangesAsync();
+            return Results.Created($"/api/workitems/{item.Id}", item);
+        });
+
         group.MapPut("/{id:int}/status", async (int id, WorkItemStatus status, TrackerDbContext db) =>
         {
             var item = await db.WorkItems.FindAsync(id);
