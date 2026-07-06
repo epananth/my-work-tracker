@@ -108,9 +108,14 @@ else
                                             <div class="fw-semibold">@epic.Title</div>
                                             <div class="small text-body-secondary">@epic.ExternalId • @(epic.TargetDate?.ToLocalTime().ToString("MMM d, yyyy") ?? "No target date")</div>
                                         </div>
-                                        <button class="btn btn-sm @(selectedEpicId == epic.Id ? "btn-primary" : "btn-outline-primary")" @onclick="() => SelectEpicAsync(epic.Id)">
-                                            What's next?
-                                        </button>
+                                        <div class="d-flex gap-2">
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => SyncEpicAsync(epic.Id)" title="Sync work items from AzDO">
+                                                🔄 Sync
+                                            </button>
+                                            <button class="btn btn-sm @(selectedEpicId == epic.Id ? "btn-primary" : "btn-outline-primary")" @onclick="() => SelectEpicAsync(epic.Id)">
+                                                What's next?
+                                            </button>
+                                        </div>
                                     </div>
 
                                     @if (!string.IsNullOrWhiteSpace(epic.Description))
@@ -282,6 +287,23 @@ else
     {
         selectedEpicId = epicId;
         await LoadPriorityAsync(epicId);
+    }
+
+    private async Task SyncEpicAsync(int epicId)
+    {
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            await Api.SyncEpicAsync(epicId);
+            successMessage = "Work items synced from Azure DevOps.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Sync failed: {ex.Message}";
+        }
     }
 
     private async Task LoadPriorityAsync(int epicId)

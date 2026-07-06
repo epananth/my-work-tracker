@@ -9,6 +9,7 @@ builder.AddServiceDefaults();
 
 builder.Services.AddOpenApi();
 builder.Services.AddSingleton<PrioritizationService>();
+builder.Services.AddScoped<AzureDevOpsSyncService>();
 
 builder.AddNpgsqlDbContext<TrackerDbContext>("trackerdb");
 

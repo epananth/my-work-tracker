@@ -53,6 +53,12 @@ public sealed class WorkTrackerApiClient(HttpClient httpClient)
         return await response.Content.ReadFromJsonAsync<EpicDto>(cancellationToken) ?? epic;
     }
 
+    public async Task SyncEpicAsync(int epicId, CancellationToken cancellationToken = default)
+    {
+        using var response = await httpClient.PostAsync($"api/epics/{epicId}/sync", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task<WorkItemDto?> GetEpicNextAsync(int epicId, CancellationToken cancellationToken = default)
     {
         using var response = await httpClient.GetAsync($"api/epics/{epicId}/next", cancellationToken);

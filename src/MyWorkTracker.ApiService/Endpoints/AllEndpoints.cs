@@ -153,11 +153,29 @@ public static class EpicEndpoints
         group.MapGet("/", async (TrackerDbContext db) =>
             await db.Epics.Include(e => e.WorkItems).ToListAsync());
 
-        group.MapPost("/", async (Epic epic, TrackerDbContext db) =>
+        group.MapPost("/", async (Epic epic, TrackerDbContext db, AzureDevOpsSyncService azDoSync) =>
         {
             db.Epics.Add(epic);
             await db.SaveChangesAsync();
-            return Results.Created($"/api/epics/{epic.Id}", epic);
+
+            // Auto-sync child work items from AzDO if URL is provided
+            if (!string.IsNullOrWhiteSpace(epic.Url) && epic.Url.Contains("dev.azure.com"))
+            {
+                await azDoSync.SyncEpicWorkItemsAsync(epic, db);
+            }
+
+            // Reload with work items
+            var result = await db.Epics.Include(e => e.WorkItems).FirstOrDefaultAsync(e => e.Id == epic.Id);
+            return Results.Created($"/api/epics/{epic.Id}", result);
+        });
+
+        group.MapPost("/{id:int}/sync", async (int id, TrackerDbContext db, AzureDevOpsSyncService azDoSync) =>
+        {
+            var epic = await db.Epics.Include(e => e.WorkItems).FirstOrDefaultAsync(e => e.Id == id);
+            if (epic is null) return Results.NotFound();
+
+            var synced = await azDoSync.SyncEpicWorkItemsAsync(epic, db);
+            return Results.Ok(new { syncedCount = synced.Count, workItems = synced });
         });
 
         group.MapGet("/{id:int}/next", async (int id, TrackerDbContext db, PrioritizationService prioritizer) =>
