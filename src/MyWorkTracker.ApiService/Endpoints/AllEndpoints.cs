@@ -1,0 +1,150 @@
+using Microsoft.EntityFrameworkCore;
+using MyWorkTracker.ApiService.Data;
+using MyWorkTracker.ApiService.Models;
+using MyWorkTracker.ApiService.Services;
+
+namespace MyWorkTracker.ApiService.Endpoints;
+
+public static class RepoEndpoints
+{
+    public static void MapRepoEndpoints(this WebApplication app)
+    {
+        var group = app.MapGroup("/api/repos");
+
+        group.MapGet("/", async (TrackerDbContext db) =>
+            await db.Repos.Where(r => r.IsActive).ToListAsync());
+
+        group.MapPost("/", async (TrackedRepo repo, TrackerDbContext db) =>
+        {
+            db.Repos.Add(repo);
+            await db.SaveChangesAsync();
+            return Results.Created($"/api/repos/{repo.Id}", repo);
+        });
+
+        group.MapDelete("/{id:int}", async (int id, TrackerDbContext db) =>
+        {
+            var repo = await db.Repos.FindAsync(id);
+            if (repo is null) return Results.NotFound();
+            repo.IsActive = false;
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
+    }
+}
+
+public static class PrEndpoints
+{
+    public static void MapPrEndpoints(this WebApplication app)
+    {
+        var group = app.MapGroup("/api/prs");
+
+        group.MapGet("/", async (TrackerDbContext db) =>
+            await db.PullRequests
+                .Where(p => p.Status == PrStatus.Open || p.Status == PrStatus.ReviewRequested)
+                .OrderByDescending(p => p.UpdatedAt)
+                .ToListAsync());
+
+        group.MapGet("/by-repo/{repoId:int}", async (int repoId, TrackerDbContext db) =>
+            await db.PullRequests.Where(p => p.RepoId == repoId).ToListAsync());
+    }
+}
+
+public static class WorkItemEndpoints
+{
+    public static void MapWorkItemEndpoints(this WebApplication app)
+    {
+        var group = app.MapGroup("/api/workitems");
+
+        group.MapGet("/", async (TrackerDbContext db) =>
+            await db.WorkItems.OrderByDescending(w => w.UpdatedAt).ToListAsync());
+
+        group.MapGet("/board", async (TrackerDbContext db) =>
+        {
+            var items = await db.WorkItems
+                .Where(w => w.Status != WorkItemStatus.Done && w.Status != WorkItemStatus.Cancelled)
+                .ToListAsync();
+
+            return items.GroupBy(w => w.Status)
+                .ToDictionary(g => g.Key.ToString(), g => g.ToList());
+        });
+
+        group.MapPut("/{id:int}/status", async (int id, WorkItemStatus status, TrackerDbContext db) =>
+        {
+            var item = await db.WorkItems.FindAsync(id);
+            if (item is null) return Results.NotFound();
+            item.Status = status;
+            item.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(item);
+        });
+    }
+}
+
+public static class EpicEndpoints
+{
+    public static void MapEpicEndpoints(this WebApplication app)
+    {
+        var group = app.MapGroup("/api/epics");
+
+        group.MapGet("/", async (TrackerDbContext db) =>
+            await db.Epics.Include(e => e.WorkItems).ToListAsync());
+
+        group.MapPost("/", async (Epic epic, TrackerDbContext db) =>
+        {
+            db.Epics.Add(epic);
+            await db.SaveChangesAsync();
+            return Results.Created($"/api/epics/{epic.Id}", epic);
+        });
+
+        group.MapGet("/{id:int}/next", async (int id, TrackerDbContext db, PrioritizationService prioritizer) =>
+        {
+            var epic = await db.Epics.Include(e => e.WorkItems).FirstOrDefaultAsync(e => e.Id == id);
+            if (epic is null) return Results.NotFound();
+
+            var next = prioritizer.GetNextItem(epic.WorkItems);
+            return next is null ? Results.NoContent() : Results.Ok(next);
+        });
+
+        group.MapGet("/{id:int}/prioritized", async (int id, TrackerDbContext db, PrioritizationService prioritizer) =>
+        {
+            var epic = await db.Epics.Include(e => e.WorkItems).FirstOrDefaultAsync(e => e.Id == id);
+            if (epic is null) return Results.NotFound();
+
+            return Results.Ok(prioritizer.GetPrioritizedItems(epic.WorkItems));
+        });
+    }
+}
+
+public static class AgentEndpoints
+{
+    public static void MapAgentEndpoints(this WebApplication app)
+    {
+        var group = app.MapGroup("/api/agents");
+
+        group.MapGet("/", async (TrackerDbContext db) =>
+            await db.Agents.ToListAsync());
+
+        group.MapPost("/", async (TrackedAgent agent, TrackerDbContext db) =>
+        {
+            db.Agents.Add(agent);
+            await db.SaveChangesAsync();
+            return Results.Created($"/api/agents/{agent.Id}", agent);
+        });
+
+        group.MapGet("/by-type/{type}", async (string type, TrackerDbContext db) =>
+            await db.Agents.Where(a => a.Type == type).ToListAsync());
+
+        group.MapPut("/{id:int}", async (int id, TrackedAgent updated, TrackerDbContext db) =>
+        {
+            var agent = await db.Agents.FindAsync(id);
+            if (agent is null) return Results.NotFound();
+            agent.Name = updated.Name;
+            agent.Description = updated.Description;
+            agent.Version = updated.Version;
+            agent.Status = updated.Status;
+            agent.Metadata = updated.Metadata;
+            await db.SaveChangesAsync();
+            return Results.Ok(agent);
+        });
+    }
+}

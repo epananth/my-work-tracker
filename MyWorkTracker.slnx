@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MyWorkTracker.ApiService/MyWorkTracker.ApiService.csproj" />
+    <Project Path="src/MyWorkTracker.AppHost/MyWorkTracker.AppHost.csproj" />
+    <Project Path="src/MyWorkTracker.ServiceDefaults/MyWorkTracker.ServiceDefaults.csproj" />
+    <Project Path="src/MyWorkTracker.Web/MyWorkTracker.Web.csproj" />
+    <Project Path="src/MyWorkTracker.Worker/MyWorkTracker.Worker.csproj" />
+  </Folder>
+</Solution>

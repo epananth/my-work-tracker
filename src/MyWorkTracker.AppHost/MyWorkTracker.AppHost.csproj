@@ -1,0 +1,22 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.4.6">
+
+  <ItemGroup>
+    <ProjectReference Include="..\MyWorkTracker.ApiService\MyWorkTracker.ApiService.csproj" />
+    <ProjectReference Include="..\MyWorkTracker.Web\MyWorkTracker.Web.csproj" />
+    <ProjectReference Include="..\MyWorkTracker.Worker\MyWorkTracker.Worker.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.4.6" />
+    <PackageReference Include="Aspire.Hosting.Redis" Version="13.4.6" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>2db35de9-dbb2-44b9-b083-c2ed45aa0ad6</UserSecretsId>
+  </PropertyGroup>
+
+</Project>

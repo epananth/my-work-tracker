@@ -1,0 +1,31 @@
+## Build results
+[Bb]uild/
+[Oo]bj/
+[Bb]in/
+[Dd]ebug/
+[Rr]elease/
+
+## NuGet
+*.nupkg
+**/packages/*
+*.nuget.props
+*.nuget.targets
+
+## User secrets
+**/appsettings.*.json
+!**/appsettings.json
+!**/appsettings.Development.json
+
+## IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.swp
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Aspire
+.aspire/
